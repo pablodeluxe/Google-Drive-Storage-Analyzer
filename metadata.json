@@ -1,0 +1,7 @@
+{
+  "name": "Google Drive Storage Analyzer",
+  "description": "Analizador de almacenamiento y mapa de calor para visualizar el tamaño de archivos y carpetas en Google Drive.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
