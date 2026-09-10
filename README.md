@@ -78,8 +78,9 @@ npm run build
 
 Los archivos finales listos para desplegar se generarán en la carpeta `dist/`.
 
-> 📖 **Para una guía exhaustiva de despliegue en Docker, Cloud Run, Vercel, Netlify o servidores Nginx, consulta el documento:**
-> 👉 **[DOCUMENTACION_TECNICA.md](./DOCUMENTACION_TECNICA.md)**
+> 📖 **Documentación adicional disponible:**
+> - 👉 **[DOCUMENTACION_TECNICA.md](./DOCUMENTACION_TECNICA.md):** Guía exhaustiva de arquitectura, tecnologías y despliegue en producción (Docker, Cloud Run, Vercel, Netlify, Nginx).
+> - 👉 **[DOCUMENTACION_FUNCIONAL.md](./DOCUMENTACION_FUNCIONAL.md):** Manual funcional completo con explicación detallada de cada módulo, visor Treemap, selector de densidades y asesor de limpieza.
 
 ---
 
