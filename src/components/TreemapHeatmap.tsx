@@ -73,9 +73,9 @@ export const TreemapHeatmap: React.FC<TreemapHeatmapProps> = ({
   const [hoveredTile, setHoveredTile] = useState<TileData | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [heatmapPalette, setHeatmapPalette] = useState<'thermal' | 'fire'>('thermal');
-  // Maximum tiles limit - defaulted to 200 as requested
-  const [tileLimit, setTileLimit] = useState<number>(200);
-  // View mode: folder navigation (max 200 per folder) vs global top (200 largest files across whole Drive)
+  // Maximum tiles limit - defaulted to 100 for optimal speed and visual clarity
+  const [tileLimit, setTileLimit] = useState<number>(100);
+  // View mode: folder navigation (max 100 per folder) vs global top (100 largest files across whole Drive)
   const [viewScope, setViewScope] = useState<'folder' | 'global'>('folder');
 
   // Responsive container observer
@@ -482,7 +482,7 @@ export const TreemapHeatmap: React.FC<TreemapHeatmapProps> = ({
           <div className="flex items-center gap-1.5 text-xs">
             <span className="text-slate-500 dark:text-slate-400 hidden xl:inline">Límite mosaicos:</span>
             <div className="inline-flex p-0.5 bg-slate-200/60 dark:bg-slate-800 rounded-xl text-xs font-medium border border-slate-200 dark:border-slate-700">
-              {[50, 100, 200].map((limit) => (
+              {[30, 50, 100].map((limit) => (
                 <button
                   key={limit}
                   id={`tile-limit-${limit}-btn`}
@@ -830,7 +830,7 @@ export const TreemapHeatmap: React.FC<TreemapHeatmapProps> = ({
                   </div>
                 </div>
                 <p className="text-[11px] text-slate-300 pt-1 border-t border-slate-800 leading-relaxed">
-                  Para optimizar el rendimiento y mostrar con máxima claridad los 200 elementos más pesados, los archivos restantes más pequeños se agruparon en este bloque sin alterar el tamaño total.
+                  Para optimizar el rendimiento y mostrar con máxima claridad los {tileLimit} elementos más pesados, los archivos restantes más pequeños se agruparon en este bloque sin alterar el tamaño total.
                 </p>
               </>
             ) : (
