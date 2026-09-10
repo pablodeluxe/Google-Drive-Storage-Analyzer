@@ -1,3 +1,21 @@
+export interface AppUser {
+  id: string;
+  displayName: string;
+  email: string;
+  photoURL?: string;
+}
+
+export interface CachedDriveData {
+  id: string;
+  userEmail: string;
+  timestamp: number;
+  quota: StorageQuota;
+  rootNode: DriveNode;
+  allNodes: DriveNode[];
+  itemCount: number;
+  totalSize: number;
+}
+
 export interface DriveFileRaw {
   id: string;
   name: string;

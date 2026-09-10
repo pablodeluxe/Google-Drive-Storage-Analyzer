@@ -1,0 +1,217 @@
+import { AppUser } from '../types';
+
+const metaEnv = (import.meta as unknown as { env?: Record<string, string> })?.env;
+
+const GOOGLE_CLIENT_ID =
+  metaEnv?.VITE_GOOGLE_CLIENT_ID ||
+  '551833648030-6p2tirvdraafu2ba9k4ehhss0at32hlu.apps.googleusercontent.com';
+
+const SCOPES = [
+  'https://www.googleapis.com/auth/drive',
+  'https://www.googleapis.com/auth/userinfo.profile',
+  'https://www.googleapis.com/auth/userinfo.email',
+].join(' ');
+
+let cachedToken: string | null = null;
+let currentUser: AppUser | null = null;
+
+// Ensure GSI script is loaded
+function loadGsiScript(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof window === 'undefined') {
+      resolve();
+      return;
+    }
+
+    if (window.google?.accounts?.oauth2) {
+      resolve();
+      return;
+    }
+
+    const existing = document.getElementById('google-gsi-script');
+    if (existing) {
+      existing.addEventListener('load', () => resolve());
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.id = 'google-gsi-script';
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.onload = () => resolve();
+    script.onerror = () => {
+      console.warn('No se pudo cargar el script de Google Identity Services.');
+      resolve();
+    };
+    document.head.appendChild(script);
+  });
+}
+
+// Fetch user profile using the access token
+async function fetchUserProfile(token: string): Promise<AppUser> {
+  try {
+    const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        id: data.sub || data.email,
+        displayName: data.name || data.given_name || data.email,
+        email: data.email,
+        photoURL: data.picture,
+      };
+    }
+  } catch (err) {
+    console.warn('No se pudo obtener el perfil de usuario desde Google:', err);
+  }
+
+  return {
+    id: 'user',
+    displayName: 'Usuario de Google',
+    email: 'usuario@gmail.com',
+  };
+}
+
+/**
+ * Inicializa la sesión y recupera sesión activa en memoria o sessionStorage
+ */
+export function initAuth(
+  onAuthSuccess?: (user: AppUser, token: string) => void,
+  onAuthFailure?: () => void
+): () => void {
+  // Preload GSI
+  loadGsiScript();
+
+  // Check saved session in sessionStorage
+  try {
+    const savedToken = sessionStorage.getItem('drive_access_token');
+    const savedUserJson = sessionStorage.getItem('drive_user_profile');
+
+    if (savedToken && savedUserJson) {
+      cachedToken = savedToken;
+      currentUser = JSON.parse(savedUserJson);
+      if (currentUser && onAuthSuccess) {
+        onAuthSuccess(currentUser, savedToken);
+      }
+      return () => {};
+    }
+  } catch {
+    // sessionStorage could be restricted
+  }
+
+  if (onAuthFailure) onAuthFailure();
+  return () => {};
+}
+
+/**
+ * Inicia sesión utilizando Google Identity Services (ventana emergente nativa de Google OAuth2)
+ */
+export async function googleSignIn(): Promise<{ user: AppUser; accessToken: string }> {
+  await loadGsiScript();
+
+  if (!window.google?.accounts?.oauth2) {
+    throw new Error(
+      'Google Identity Services no está disponible. Verifica tu conexión o bloqueadores de anuncios.'
+    );
+  }
+
+  return new Promise((resolve, reject) => {
+    try {
+      const tokenClient = window.google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: SCOPES,
+        callback: async (response: { access_token?: string; error?: string }) => {
+          if (response.error || !response.access_token) {
+            reject(new Error(response.error || 'No se obtuvo el token de acceso de Google.'));
+            return;
+          }
+
+          const token = response.access_token;
+          cachedToken = token;
+
+          try {
+            sessionStorage.setItem('drive_access_token', token);
+          } catch {
+            // ignore
+          }
+
+          const user = await fetchUserProfile(token);
+          currentUser = user;
+
+          try {
+            sessionStorage.setItem('drive_user_profile', JSON.stringify(user));
+          } catch {
+            // ignore
+          }
+
+          resolve({ user, accessToken: token });
+        },
+        error_callback: (err: { message?: string; type?: string }) => {
+          reject(new Error(err.message || 'Error en la autorización de Google.'));
+        },
+      });
+
+      tokenClient.requestAccessToken({ prompt: 'consent' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error al inicializar OAuth2';
+      reject(new Error(msg));
+    }
+  });
+}
+
+export function getAccessToken(): string | null {
+  return cachedToken;
+}
+
+export function getCurrentUser(): AppUser | null {
+  return currentUser;
+}
+
+export function logout(): Promise<void> {
+  return new Promise((resolve) => {
+    if (cachedToken && window.google?.accounts?.oauth2) {
+      try {
+        window.google.accounts.oauth2.revoke(cachedToken, () => {
+          // revoked
+        });
+      } catch {
+        // ignore
+      }
+    }
+
+    cachedToken = null;
+    currentUser = null;
+
+    try {
+      sessionStorage.removeItem('drive_access_token');
+      sessionStorage.removeItem('drive_user_profile');
+    } catch {
+      // ignore
+    }
+
+    resolve();
+  });
+}
+
+// Extend global window typing for GSI
+declare global {
+  interface Window {
+    google?: {
+      accounts?: {
+        oauth2: {
+          initTokenClient: (config: {
+            client_id: string;
+            scope: string;
+            callback: (response: { access_token?: string; error?: string }) => void;
+            error_callback?: (err: { message?: string; type?: string }) => void;
+          }) => {
+            requestAccessToken: (options?: { prompt?: string }) => void;
+          };
+          revoke: (token: string, done: () => void) => void;
+        };
+      };
+    };
+  }
+}

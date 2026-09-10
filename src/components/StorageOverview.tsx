@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { StorageQuota, FileCategory, DriveNode } from '../types';
 import { formatBytes, CATEGORY_LABELS } from '../utils/format';
+import { Database } from 'lucide-react';
 
 interface StorageOverviewProps {
   quota: StorageQuota | null;
@@ -21,6 +22,8 @@ interface StorageOverviewProps {
   onSearchChange: (q: string) => void;
   selectedCategory: FileCategory | 'huge' | 'stale' | 'all';
   onSelectCategory: (cat: FileCategory | 'huge' | 'stale' | 'all') => void;
+  cachedTimestamp?: number | null;
+  onClearCache?: () => void;
 }
 
 export const StorageOverview: React.FC<StorageOverviewProps> = ({
@@ -30,6 +33,8 @@ export const StorageOverview: React.FC<StorageOverviewProps> = ({
   onSearchChange,
   selectedCategory,
   onSelectCategory,
+  cachedTimestamp,
+  onClearCache,
 }) => {
   const usage = quota?.usage || 0;
   const limit = quota?.limit || 0;
@@ -138,6 +143,27 @@ export const StorageOverview: React.FC<StorageOverviewProps> = ({
               </span>
             )}
           </div>
+
+          {cachedTimestamp && (
+            <div className="mt-2 pt-1.5 border-t border-slate-100 dark:border-slate-800/60 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+              <div className="flex items-center gap-1.5">
+                <Database className="w-3 h-3 text-blue-500 shrink-0" />
+                <span>
+                  Almacenado localmente en <strong>IndexedDB</strong>: {new Date(cachedTimestamp).toLocaleDateString()} a las {new Date(cachedTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+              {onClearCache && (
+                <button
+                  type="button"
+                  onClick={onClearCache}
+                  className="text-slate-400 hover:text-rose-500 underline transition-colors cursor-pointer"
+                  title="Eliminar caché local de IndexedDB"
+                >
+                  Limpiar caché
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
 

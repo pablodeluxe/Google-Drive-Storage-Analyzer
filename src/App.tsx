@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { User } from 'firebase/auth';
 import {
   Folder,
   File,
@@ -18,13 +17,21 @@ import {
   HeatmapColorMode,
   ScanProgress,
   FileCategory,
+  AppUser,
 } from './types';
 import {
   initAuth,
   googleSignIn,
   logout,
   getAccessToken,
-} from './services/firebase';
+} from './services/auth';
+import {
+  saveScanToIndexedDB,
+  getLatestScanFromIndexedDB,
+  clearIndexedDBCache,
+  exportScanAsJSON,
+  importScanFromJSON,
+} from './services/db';
 import {
   fetchStorageQuota,
   scanDrive,
@@ -41,10 +48,11 @@ import { CleanupAdvisor } from './components/CleanupAdvisor';
 import { CleanupModal } from './components/CleanupModal';
 
 export default function App() {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isDemoMode, setIsDemoMode] = useState(true);
+  const [cachedTimestamp, setCachedTimestamp] = useState<number | null>(null);
 
   // Tree & data state
   const [quota, setQuota] = useState<StorageQuota | null>(null);
@@ -128,6 +136,19 @@ export default function App() {
       setSelectedNode(null);
       setIsDemoMode(false);
 
+      // Persist scan result automatically in browser IndexedDB
+      try {
+        const savedScan = await saveScanToIndexedDB({
+          userEmail: q.userEmail || 'mi_drive',
+          quota: q,
+          rootNode: scannedRoot,
+          allNodes: scannedAll,
+        });
+        setCachedTimestamp(savedScan.timestamp);
+      } catch (dbErr) {
+        console.warn('No se pudo persistir en IndexedDB:', dbErr);
+      }
+
       setScanProgress({
         isScanning: false,
         stage: 'complete',
@@ -135,7 +156,7 @@ export default function App() {
         message: 'Escaneo completado con éxito.',
       });
 
-      showToast(`Se escanearon ${scannedAll.length.toLocaleString()} elementos de tu Google Drive.`);
+      showToast(`Se escanearon ${scannedAll.length.toLocaleString()} elementos de tu Google Drive y se guardaron en IndexedDB.`);
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : 'Error desconocido al escanear Drive';
       console.error('Error scanning Drive:', err);
@@ -150,16 +171,32 @@ export default function App() {
     }
   }, [showToast]);
 
-  // Auth setup on mount
+  // Auth setup and initial IndexedDB check on mount
   useEffect(() => {
-    // Initial demo load so interface is immediately interactive
-    loadDemoData();
+    // Check if an existing scan exists in IndexedDB before falling back to demo
+    getLatestScanFromIndexedDB()
+      .then((cached) => {
+        if (cached) {
+          setQuota(cached.quota);
+          setRootNode(cached.rootNode);
+          setAllNodes(cached.allNodes);
+          setActiveNode(cached.rootNode);
+          setSelectedNode(null);
+          setCachedTimestamp(cached.timestamp);
+          setIsDemoMode(false);
+        } else {
+          loadDemoData();
+        }
+      })
+      .catch(() => {
+        loadDemoData();
+      });
 
     const unsubscribe = initAuth(
       (authUser, token) => {
         setUser(authUser);
         setAccessToken(token);
-        if (token) {
+        if (token && !cachedTimestamp) {
           loadRealDriveData(token);
         }
       },
@@ -174,7 +211,69 @@ export default function App() {
         unsubscribe();
       }
     };
-  }, [loadDemoData, loadRealDriveData]);
+  }, [loadDemoData, loadRealDriveData, cachedTimestamp]);
+
+  // Export scan to JSON file
+  const handleExportJSON = useCallback(() => {
+    if (!rootNode || !quota) {
+      showToast('No hay datos disponibles para exportar.', 'error');
+      return;
+    }
+    exportScanAsJSON({
+      id: user?.email || 'drive_scan',
+      userEmail: user?.email || quota.userEmail || 'usuario@drive',
+      timestamp: cachedTimestamp || Date.now(),
+      quota,
+      rootNode,
+      allNodes,
+      itemCount: allNodes.length,
+      totalSize: rootNode.size,
+    });
+    showToast('Reporte JSON descargado localmente a tu equipo.');
+  }, [rootNode, quota, user, cachedTimestamp, allNodes, showToast]);
+
+  // Import scan from local JSON file
+  const handleImportJSON = useCallback(
+    async (file: File) => {
+      try {
+        const imported = await importScanFromJSON(file);
+        setQuota(imported.quota);
+        setRootNode(imported.rootNode);
+        setAllNodes(imported.allNodes);
+        setActiveNode(imported.rootNode);
+        setSelectedNode(null);
+        setIsDemoMode(false);
+        setCachedTimestamp(imported.timestamp);
+
+        // Store into IndexedDB so it is remembered
+        await saveScanToIndexedDB({
+          userEmail: imported.userEmail,
+          quota: imported.quota,
+          rootNode: imported.rootNode,
+          allNodes: imported.allNodes,
+        });
+
+        showToast(
+          `Archivo local cargado (${imported.itemCount.toLocaleString()} elementos) y guardado en IndexedDB.`
+        );
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Error al importar JSON';
+        showToast(msg, 'error');
+      }
+    },
+    [showToast]
+  );
+
+  // Clear IndexedDB cache
+  const handleClearCache = useCallback(async () => {
+    try {
+      await clearIndexedDBCache();
+      setCachedTimestamp(null);
+      showToast('Caché local de IndexedDB eliminada.');
+    } catch {
+      showToast('Error al limpiar la caché local.', 'error');
+    }
+  }, [showToast]);
 
   // Login handler
   const handleSignIn = async () => {
@@ -395,6 +494,10 @@ export default function App() {
         onRescan={handleRescan}
         scanProgress={scanProgress}
         isLoggingIn={isLoggingIn}
+        cachedTimestamp={cachedTimestamp}
+        onExportJSON={handleExportJSON}
+        onImportJSON={handleImportJSON}
+        onClearCache={handleClearCache}
       />
 
       {/* Main Content Area */}
@@ -440,6 +543,8 @@ export default function App() {
           onSearchChange={setSearchQuery}
           selectedCategory={selectedCategory}
           onSelectCategory={setSelectedCategory}
+          cachedTimestamp={cachedTimestamp}
+          onClearCache={handleClearCache}
         />
 
         {/* Treemap & Heatmap Section */}

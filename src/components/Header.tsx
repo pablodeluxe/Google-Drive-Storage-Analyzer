@@ -1,17 +1,17 @@
-import React from 'react';
-import { User } from 'firebase/auth';
+import React, { useRef } from 'react';
 import {
   RotateCw,
   LogOut,
   Sparkles,
   HardDrive,
-  ShieldCheck,
-  FolderOpen,
+  Download,
+  Upload,
+  Database,
 } from 'lucide-react';
-import { ScanProgress } from '../types';
+import { ScanProgress, AppUser } from '../types';
 
 interface HeaderProps {
-  user: User | null;
+  user: AppUser | null;
   isDemoMode: boolean;
   onToggleDemoMode: () => void;
   onSignIn: () => void;
@@ -19,6 +19,10 @@ interface HeaderProps {
   onRescan: () => void;
   scanProgress: ScanProgress;
   isLoggingIn: boolean;
+  cachedTimestamp?: number | null;
+  onExportJSON?: () => void;
+  onImportJSON?: (file: File) => void;
+  onClearCache?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -30,7 +34,20 @@ export const Header: React.FC<HeaderProps> = ({
   onRescan,
   scanProgress,
   isLoggingIn,
+  cachedTimestamp,
+  onExportJSON,
+  onImportJSON,
+  onClearCache,
 }) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && onImportJSON) {
+      onImportJSON(file);
+      e.target.value = '';
+    }
+  };
   return (
     <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30 shadow-2xs">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
@@ -74,6 +91,41 @@ export const Header: React.FC<HeaderProps> = ({
               {scanProgress.isScanning ? 'Escaneando...' : 'Re-escanear'}
             </span>
           </button>
+
+          {/* Hidden file input for JSON import */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept=".json,application/json"
+            onChange={handleFileChange}
+            className="hidden"
+          />
+
+          {/* Local Snapshot Export/Import */}
+          <div className="hidden sm:flex items-center gap-1 border-r border-slate-200 dark:border-slate-800 pr-2">
+            {onExportJSON && (
+              <button
+                id="export-json-btn"
+                type="button"
+                onClick={onExportJSON}
+                className="p-2 text-xs text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                title="Exportar copia local del análisis (.json)"
+              >
+                <Download className="w-4 h-4" />
+              </button>
+            )}
+            {onImportJSON && (
+              <button
+                id="import-json-btn"
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="p-2 text-xs text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                title="Cargar análisis desde archivo .json local"
+              >
+                <Upload className="w-4 h-4" />
+              </button>
+            )}
+          </div>
 
           {/* Demo toggle */}
           <button
