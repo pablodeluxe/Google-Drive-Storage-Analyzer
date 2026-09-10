@@ -494,7 +494,7 @@ export const TreemapHeatmap: React.FC<TreemapHeatmapProps> = ({
           <div className="flex items-center gap-1.5 text-xs">
             <span className="text-slate-500 dark:text-slate-400 hidden xl:inline">Límite mosaicos:</span>
             <div className="inline-flex p-0.5 bg-slate-200/60 dark:bg-slate-800 rounded-xl text-xs font-medium border border-slate-200 dark:border-slate-700">
-              {[30, 50, 100].map((limit) => (
+              {[30, 50, 100, 500].map((limit) => (
                 <button
                   key={limit}
                   id={`tile-limit-${limit}-btn`}
