@@ -233,14 +233,25 @@ export const TreemapHeatmap: React.FC<TreemapHeatmapProps> = ({
     const validChildren = currentTreeData.children.filter((c) => c.size > 0);
     if (validChildren.length === 0) return [];
 
-    const rootHierarchy = hierarchy<DriveNode>({
+    // Create shallow items for D3 so each direct item is treated as an atomic tile.
+    // Setting children to undefined prevents D3 hierarchy from recursing down into folder subtrees,
+    // which previously caused hundreds of unwanted nested leaf tiles.
+    type HierarchyItem = DriveNode & { _originalNode?: DriveNode };
+
+    const flatChildren: HierarchyItem[] = validChildren.map((item) => ({
+      ...item,
+      children: undefined,
+      _originalNode: item,
+    }));
+
+    const rootHierarchy = hierarchy<HierarchyItem>({
       ...currentTreeData,
-      children: validChildren,
+      children: flatChildren,
     })
-      .sum((d) => (d.children && d.children.length > 0 ? 0 : d.size))
+      .sum((d) => d.size)
       .sort((a, b) => (b.value || 0) - (a.value || 0));
 
-    const treemapLayout = d3Treemap<DriveNode>()
+    const treemapLayout = d3Treemap<HierarchyItem>()
       .tile(treemapSquarify.ratio(1.4))
       .size([dimensions.width, dimensions.height])
       .paddingInner(3)
@@ -249,8 +260,9 @@ export const TreemapHeatmap: React.FC<TreemapHeatmapProps> = ({
 
     treemapLayout(rootHierarchy);
 
-    const leaves = (rootHierarchy as HierarchyRectangularNode<DriveNode>).leaves() as HierarchyRectangularNode<DriveNode>[];
+    const leaves = (rootHierarchy as HierarchyRectangularNode<HierarchyItem>).leaves();
     return leaves.map((leaf) => {
+      const original = leaf.data._originalNode || leaf.data;
       const x0 = leaf.x0;
       const y0 = leaf.y0;
       const x1 = leaf.x1;
@@ -259,14 +271,14 @@ export const TreemapHeatmap: React.FC<TreemapHeatmapProps> = ({
       const height = Math.max(0, y1 - y0);
 
       return {
-        node: leaf.data,
+        node: original as DriveNode,
         x0,
         y0,
         x1,
         y1,
         width,
         height,
-        value: leaf.value || leaf.data.size,
+        value: leaf.value || original.size,
       };
     });
   }, [currentTreeData, dimensions]);
