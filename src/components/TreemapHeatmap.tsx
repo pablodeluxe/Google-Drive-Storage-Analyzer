@@ -174,6 +174,7 @@ export const TreemapHeatmap: React.FC<TreemapHeatmapProps> = ({
     // Folder scope
     const validChildren = (activeNode.children || []).filter((c) => c.size > 0);
     const sorted = [...validChildren].sort((a, b) => b.size - a.size);
+    const childrenTotalSize = validChildren.reduce((acc, c) => acc + c.size, 0);
 
     if (sorted.length > tileLimit) {
       // Pick top (tileLimit - 1) largest and bundle remaining into 'Otros'
@@ -203,7 +204,7 @@ export const TreemapHeatmap: React.FC<TreemapHeatmapProps> = ({
           ...activeNode,
           children: [...topSlice, othersGroup],
         },
-        totalViewSize: activeNode.size,
+        totalViewSize: childrenTotalSize,
         isAggregated: true,
         remainingCount: remaining.length,
         remainingSize: remSize,
@@ -216,7 +217,7 @@ export const TreemapHeatmap: React.FC<TreemapHeatmapProps> = ({
         ...activeNode,
         children: sorted,
       },
-      totalViewSize: activeNode.size,
+      totalViewSize: childrenTotalSize,
       isAggregated: false,
       remainingCount: 0,
       remainingSize: 0,
@@ -234,8 +235,7 @@ export const TreemapHeatmap: React.FC<TreemapHeatmapProps> = ({
     if (validChildren.length === 0) return [];
 
     // Create shallow items for D3 so each direct item is treated as an atomic tile.
-    // Setting children to undefined prevents D3 hierarchy from recursing down into folder subtrees,
-    // which previously caused hundreds of unwanted nested leaf tiles.
+    // Setting children to undefined prevents D3 hierarchy from recursing down into folder subtrees.
     type HierarchyItem = DriveNode & { _originalNode?: DriveNode };
 
     const flatChildren: HierarchyItem[] = validChildren.map((item) => ({
@@ -248,14 +248,16 @@ export const TreemapHeatmap: React.FC<TreemapHeatmapProps> = ({
       ...currentTreeData,
       children: flatChildren,
     })
-      .sum((d) => d.size)
+      // CRITICAL: Parent nodes must contribute 0 so 100% of the canvas area is distributed among children,
+      // preventing the blank space and L-shape artifact where D3 reserved 50% for the root node itself.
+      .sum((d) => (d.children && d.children.length > 0 ? 0 : d.size))
       .sort((a, b) => (b.value || 0) - (a.value || 0));
 
     const treemapLayout = d3Treemap<HierarchyItem>()
-      .tile(treemapSquarify.ratio(1.4))
+      .tile(treemapSquarify.ratio(1.1))
       .size([dimensions.width, dimensions.height])
-      .paddingInner(3)
-      .paddingOuter(3)
+      .paddingInner(2)
+      .paddingOuter(2)
       .round(true);
 
     treemapLayout(rootHierarchy);
