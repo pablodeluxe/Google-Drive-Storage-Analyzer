@@ -554,6 +554,7 @@ export default function App() {
               <TreemapHeatmap
                 rootNode={rootNode}
                 activeNode={filteredActiveNode}
+                allNodes={allNodes}
                 onNavigateToNode={(node) => {
                   setActiveNode(node);
                   setSearchQuery('');
