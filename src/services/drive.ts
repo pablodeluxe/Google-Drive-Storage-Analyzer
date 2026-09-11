@@ -1,5 +1,19 @@
 import { DriveFileRaw, DriveNode, StorageQuota } from '../types';
 import { getFileCategory } from '../utils/format';
+import { clearAuthSession } from './auth';
+
+export class DriveAuthExpiredError extends Error {
+  readonly isAuthExpired = true;
+  readonly statusCode = 401;
+
+  constructor(message?: string) {
+    super(
+      message ||
+        'Tu sesión de Google Drive ha caducado o las credenciales no son válidas. Por favor vuelve a iniciar sesión.'
+    );
+    this.name = 'DriveAuthExpiredError';
+  }
+}
 
 const DRIVE_API_BASE = 'https://www.googleapis.com/drive/v3';
 
@@ -12,6 +26,12 @@ export async function fetchStorageQuota(accessToken: string): Promise<StorageQuo
 
   if (!res.ok) {
     const errText = await res.text();
+    if (res.status === 401) {
+      clearAuthSession();
+      throw new DriveAuthExpiredError(
+        'Tu sesión de Google Drive ha caducado o las credenciales no son válidas. Por favor vuelve a conectar tu cuenta.'
+      );
+    }
     throw new Error(`Error al consultar almacenamiento de Google Drive (${res.status}): ${errText}`);
   }
 
@@ -63,6 +83,12 @@ export async function scanDrive(
 
     if (!res.ok) {
       const errText = await res.text();
+      if (res.status === 401) {
+        clearAuthSession();
+        throw new DriveAuthExpiredError(
+          'Tu sesión de Google Drive ha caducado durante el escaneo. Por favor vuelve a conectar tu cuenta.'
+        );
+      }
       throw new Error(`Error al listar archivos (${res.status}): ${errText}`);
     }
 
@@ -204,6 +230,12 @@ export async function trashDriveFile(accessToken: string, fileId: string): Promi
 
   if (!res.ok) {
     const errText = await res.text();
+    if (res.status === 401) {
+      clearAuthSession();
+      throw new DriveAuthExpiredError(
+        'Tu sesión de Google Drive ha expirado. Por favor vuelve a conectar tu cuenta para mover archivos a la papelera.'
+      );
+    }
     throw new Error(`Error al mover a la papelera (${res.status}): ${errText}`);
   }
 }
@@ -221,6 +253,12 @@ export async function deleteDriveFilePermanently(
 
   if (!res.ok) {
     const errText = await res.text();
+    if (res.status === 401) {
+      clearAuthSession();
+      throw new DriveAuthExpiredError(
+        'Tu sesión de Google Drive ha expirado. Por favor vuelve a conectar tu cuenta para eliminar archivos.'
+      );
+    }
     throw new Error(`Error al eliminar permanentemente (${res.status}): ${errText}`);
   }
 }

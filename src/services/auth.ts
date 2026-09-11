@@ -15,6 +15,30 @@ const SCOPES = [
 let cachedToken: string | null = null;
 let currentUser: AppUser | null = null;
 
+export function clearAuthSession(): void {
+  cachedToken = null;
+  currentUser = null;
+  try {
+    sessionStorage.removeItem('drive_access_token');
+    sessionStorage.removeItem('drive_token_expires_at');
+    sessionStorage.removeItem('drive_user_profile');
+  } catch {
+    // ignore
+  }
+}
+
+export function isTokenExpired(): boolean {
+  if (!cachedToken) return true;
+  try {
+    const expiresAtStr = sessionStorage.getItem('drive_token_expires_at');
+    if (!expiresAtStr) return false;
+    const expiresAt = parseInt(expiresAtStr, 10);
+    return !isNaN(expiresAt) && Date.now() >= expiresAt;
+  } catch {
+    return false;
+  }
+}
+
 // Ensure GSI script is loaded
 function loadGsiScript(): Promise<void> {
   return new Promise((resolve) => {
@@ -88,8 +112,20 @@ export function initAuth(
   try {
     const savedToken = sessionStorage.getItem('drive_access_token');
     const savedUserJson = sessionStorage.getItem('drive_user_profile');
+    const expiresAtStr = sessionStorage.getItem('drive_token_expires_at');
 
     if (savedToken && savedUserJson) {
+      // Validate expiration
+      if (expiresAtStr) {
+        const expiresAt = parseInt(expiresAtStr, 10);
+        if (!isNaN(expiresAt) && Date.now() >= expiresAt) {
+          // Token is already expired! Clean up and do not trigger onAuthSuccess
+          clearAuthSession();
+          if (onAuthFailure) onAuthFailure();
+          return () => {};
+        }
+      }
+
       cachedToken = savedToken;
       currentUser = JSON.parse(savedUserJson);
       if (currentUser && onAuthSuccess) {
@@ -122,7 +158,11 @@ export async function googleSignIn(): Promise<{ user: AppUser; accessToken: stri
       const tokenClient = window.google.accounts.oauth2.initTokenClient({
         client_id: GOOGLE_CLIENT_ID,
         scope: SCOPES,
-        callback: async (response: { access_token?: string; error?: string }) => {
+        callback: async (response: {
+          access_token?: string;
+          error?: string;
+          expires_in?: number | string;
+        }) => {
           if (response.error || !response.access_token) {
             reject(new Error(response.error || 'No se obtuvo el token de acceso de Google.'));
             return;
@@ -133,6 +173,10 @@ export async function googleSignIn(): Promise<{ user: AppUser; accessToken: stri
 
           try {
             sessionStorage.setItem('drive_access_token', token);
+            // Default to 3600 seconds minus 120s buffer if expires_in not specified
+            const expiresInSec = Number(response.expires_in) || 3599;
+            const expiresAt = Date.now() + Math.max(expiresInSec - 120, 60) * 1000;
+            sessionStorage.setItem('drive_token_expires_at', expiresAt.toString());
           } catch {
             // ignore
           }
@@ -181,16 +225,7 @@ export function logout(): Promise<void> {
       }
     }
 
-    cachedToken = null;
-    currentUser = null;
-
-    try {
-      sessionStorage.removeItem('drive_access_token');
-      sessionStorage.removeItem('drive_user_profile');
-    } catch {
-      // ignore
-    }
-
+    clearAuthSession();
     resolve();
   });
 }

@@ -10,6 +10,7 @@ import {
   Filter,
   Layers,
   ArrowRight,
+  X,
 } from 'lucide-react';
 import {
   DriveNode,
@@ -24,6 +25,7 @@ import {
   googleSignIn,
   logout,
   getAccessToken,
+  clearAuthSession,
 } from './services/auth';
 import {
   saveScanToIndexedDB,
@@ -38,6 +40,7 @@ import {
   trashDriveFile,
   getMockDriveData,
   buildDriveTree,
+  DriveAuthExpiredError,
 } from './services/drive';
 import { formatBytes } from './utils/format';
 import { Header } from './components/Header';
@@ -158,6 +161,33 @@ export default function App() {
 
       showToast(`Se escanearon ${scannedAll.length.toLocaleString()} elementos de tu Google Drive y se guardaron en IndexedDB.`);
     } catch (err: unknown) {
+      const isAuthErr =
+        err instanceof DriveAuthExpiredError ||
+        (err instanceof Error &&
+          (err.message.includes('401') ||
+            err.message.includes('UNAUTHENTICATED') ||
+            err.message.includes('Invalid Credentials') ||
+            err.message.includes('invalid authentication credentials')));
+
+      if (isAuthErr) {
+        clearAuthSession();
+        setUser(null);
+        setAccessToken(null);
+        setScanProgress({
+          isScanning: false,
+          stage: 'error',
+          filesFound: 0,
+          message: 'Sesión expirada de Google Drive',
+          error:
+            'Tu sesión de Google Drive ha caducado o las credenciales no son válidas. Por favor vuelve a conectar tu cuenta.',
+        });
+        showToast(
+          'Tu sesión de Google Drive ha expirado. Haz clic en "Conectar Google Drive" para renovarla.',
+          'error'
+        );
+        return;
+      }
+
       const errMsg = err instanceof Error ? err.message : 'Error desconocido al escanear Drive';
       console.error('Error scanning Drive:', err);
       setScanProgress({
@@ -173,9 +203,12 @@ export default function App() {
 
   // Auth setup and initial IndexedDB check on mount
   useEffect(() => {
+    let isMounted = true;
+
     // Check if an existing scan exists in IndexedDB before falling back to demo
     getLatestScanFromIndexedDB()
       .then((cached) => {
+        if (!isMounted) return;
         if (cached) {
           setQuota(cached.quota);
           setRootNode(cached.rootNode);
@@ -189,29 +222,39 @@ export default function App() {
         }
       })
       .catch(() => {
-        loadDemoData();
+        if (isMounted) {
+          loadDemoData();
+        }
       });
 
     const unsubscribe = initAuth(
       (authUser, token) => {
+        if (!isMounted) return;
         setUser(authUser);
         setAccessToken(token);
-        if (token && !cachedTimestamp) {
-          loadRealDriveData(token);
-        }
+
+        // Only auto-trigger scan if there is no cached scan in IndexedDB
+        getLatestScanFromIndexedDB().then((cached) => {
+          if (!isMounted) return;
+          if (!cached && token) {
+            loadRealDriveData(token);
+          }
+        });
       },
       () => {
+        if (!isMounted) return;
         setUser(null);
         setAccessToken(null);
       }
     );
 
     return () => {
+      isMounted = false;
       if (typeof unsubscribe === 'function') {
         unsubscribe();
       }
     };
-  }, [loadDemoData, loadRealDriveData, cachedTimestamp]);
+  }, [loadDemoData, loadRealDriveData]);
 
   // Export scan to JSON file
   const handleExportJSON = useCallback(() => {
@@ -413,6 +456,25 @@ export default function App() {
       setItemsToTrash([]);
       showToast(`¡Liberaste ${formatBytes(totalFreed)}! Se movieron a la papelera.`);
     } catch (err: unknown) {
+      const isAuthErr =
+        err instanceof DriveAuthExpiredError ||
+        (err instanceof Error &&
+          (err.message.includes('401') ||
+            err.message.includes('UNAUTHENTICATED') ||
+            err.message.includes('Invalid Credentials')));
+
+      if (isAuthErr) {
+        clearAuthSession();
+        setUser(null);
+        setAccessToken(null);
+        showToast(
+          'Tu sesión de Google Drive ha expirado. Por favor reconecta tu cuenta.',
+          'error'
+        );
+        setCleanupModalOpen(false);
+        return;
+      }
+
       const msg = err instanceof Error ? err.message : 'Error al eliminar los archivos';
       console.error('Deletion error:', err);
       showToast(msg, 'error');
@@ -502,6 +564,58 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+        {/* Error Alert Banner if scanning or authentication failed */}
+        {scanProgress.stage === 'error' && scanProgress.error && (
+          <div
+            id="scan-error-alert"
+            className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-xs"
+          >
+            <div className="flex items-start sm:items-center gap-3">
+              <div className="p-2 rounded-xl bg-rose-600 text-white shrink-0 mt-0.5 sm:mt-0">
+                <AlertCircle className="w-4 h-4" />
+              </div>
+              <div>
+                <strong className="text-rose-900 dark:text-rose-100 text-sm block font-semibold">
+                  {scanProgress.message || 'Error de conexión con Google Drive'}
+                </strong>
+                <p className="text-rose-700 dark:text-rose-300 mt-0.5">
+                  {scanProgress.error}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                id="error-reconnect-btn"
+                type="button"
+                onClick={handleSignIn}
+                disabled={isLoggingIn}
+                className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-semibold rounded-xl transition-colors shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <span>Reconectar Google Drive</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+              <button
+                id="dismiss-error-btn"
+                type="button"
+                onClick={() =>
+                  setScanProgress({
+                    isScanning: false,
+                    stage: 'idle',
+                    filesFound: 0,
+                    message: '',
+                    error: undefined,
+                  })
+                }
+                className="p-2 text-rose-500 hover:text-rose-700 dark:hover:text-rose-300 rounded-xl hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-colors cursor-pointer"
+                title="Descartar aviso"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Banner if demo mode is active */}
         {isDemoMode && (
           <div
