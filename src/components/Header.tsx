@@ -56,8 +56,21 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
         {/* Brand & Title */}
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-xl bg-linear-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center shadow-xs shrink-0">
-            <HardDrive className="w-5 h-5" />
+          <div className="w-10 h-10 rounded-xl overflow-hidden shadow-xs shrink-0 border border-slate-200/80 dark:border-slate-700/80 bg-slate-900 flex items-center justify-center">
+            <img
+              src="/app-icon.png"
+              alt="Google Drive Storage Analyzer Icon"
+              referrerPolicy="no-referrer"
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                // Fallback icon if image cannot be loaded
+                const target = e.currentTarget;
+                target.style.display = 'none';
+                if (target.parentElement) {
+                  target.parentElement.innerHTML = '<span class="text-blue-500 font-bold text-xs">GD</span>';
+                }
+              }}
+            />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
