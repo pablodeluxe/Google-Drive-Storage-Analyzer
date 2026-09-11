@@ -49,6 +49,7 @@ import { TreemapHeatmap } from './components/TreemapHeatmap';
 import { FileDetailsDrawer } from './components/FileDetailsDrawer';
 import { CleanupAdvisor } from './components/CleanupAdvisor';
 import { CleanupModal } from './components/CleanupModal';
+import { ClientIdModal } from './components/ClientIdModal';
 
 export default function App() {
   const [user, setUser] = useState<AppUser | null>(null);
@@ -56,6 +57,7 @@ export default function App() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isDemoMode, setIsDemoMode] = useState(true);
   const [cachedTimestamp, setCachedTimestamp] = useState<number | null>(null);
+  const [clientIdModalOpen, setClientIdModalOpen] = useState(false);
 
   // Tree & data state
   const [quota, setQuota] = useState<StorageQuota | null>(null);
@@ -560,6 +562,7 @@ export default function App() {
         onExportJSON={handleExportJSON}
         onImportJSON={handleImportJSON}
         onClearCache={handleClearCache}
+        onOpenClientIdModal={() => setClientIdModalOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -584,7 +587,15 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              <button
+                id="error-config-oauth-btn"
+                type="button"
+                onClick={() => setClientIdModalOpen(true)}
+                className="px-3.5 py-2 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 font-semibold rounded-xl transition-colors shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <span>Configurar Client ID</span>
+              </button>
               <button
                 id="error-reconnect-btn"
                 type="button"
@@ -725,6 +736,13 @@ export default function App() {
         onConfirm={handleConfirmCleanup}
         items={itemsToTrash}
         isProcessing={isProcessingCleanup}
+      />
+
+      {/* OAuth Client ID Configuration Modal */}
+      <ClientIdModal
+        isOpen={clientIdModalOpen}
+        onClose={() => setClientIdModalOpen(false)}
+        onSavedAndConnect={handleSignIn}
       />
 
       {/* Toast Notification */}

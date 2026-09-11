@@ -1,10 +1,37 @@
 import { AppUser } from '../types';
 
-const metaEnv = (import.meta as unknown as { env?: Record<string, string> })?.env;
+export function getActiveGoogleClientId(): string {
+  // 1. Direct Vite static replacement at build-time
+  const viteEnvId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+  if (viteEnvId && typeof viteEnvId === 'string' && viteEnvId.trim() !== '') {
+    return viteEnvId.trim();
+  }
 
-const GOOGLE_CLIENT_ID =
-  metaEnv?.VITE_GOOGLE_CLIENT_ID ||
-  '551833648030-6p2tirvdraafu2ba9k4ehhss0at32hlu.apps.googleusercontent.com';
+  // 2. Custom Client ID saved in browser localStorage
+  try {
+    const custom = localStorage.getItem('custom_google_client_id');
+    if (custom && custom.trim() !== '') {
+      return custom.trim();
+    }
+  } catch {
+    // ignore
+  }
+
+  // 3. Fallback default
+  return '551833648030-6p2tirvdraafu2ba9k4ehhss0at32hlu.apps.googleusercontent.com';
+}
+
+export function setCustomGoogleClientId(clientId: string): void {
+  try {
+    if (clientId && clientId.trim()) {
+      localStorage.setItem('custom_google_client_id', clientId.trim());
+    } else {
+      localStorage.removeItem('custom_google_client_id');
+    }
+  } catch {
+    // ignore
+  }
+}
 
 const SCOPES = [
   'https://www.googleapis.com/auth/drive',
@@ -155,8 +182,9 @@ export async function googleSignIn(): Promise<{ user: AppUser; accessToken: stri
 
   return new Promise((resolve, reject) => {
     try {
+      const activeClientId = getActiveGoogleClientId();
       const tokenClient = window.google.accounts.oauth2.initTokenClient({
-        client_id: GOOGLE_CLIENT_ID,
+        client_id: activeClientId,
         scope: SCOPES,
         callback: async (response: {
           access_token?: string;
@@ -193,7 +221,13 @@ export async function googleSignIn(): Promise<{ user: AppUser; accessToken: stri
           resolve({ user, accessToken: token });
         },
         error_callback: (err: { message?: string; type?: string }) => {
-          reject(new Error(err.message || 'Error en la autorización de Google.'));
+          console.error('Google OAuth error:', err);
+          let errText = err.message || 'Error en la autorización de Google.';
+          if (err.type === 'origin_mismatch' || errText.toLowerCase().includes('origin_mismatch')) {
+            const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+            errText = `Error 400 origin_mismatch: El origen "${currentOrigin}" no está en los "Orígenes autorizados de JavaScript" del Client ID (${activeClientId}) en Google Cloud Console.`;
+          }
+          reject(new Error(errText));
         },
       });
 

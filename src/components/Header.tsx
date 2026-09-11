@@ -7,6 +7,7 @@ import {
   Download,
   Upload,
   Database,
+  KeyRound,
 } from 'lucide-react';
 import { ScanProgress, AppUser } from '../types';
 
@@ -23,6 +24,7 @@ interface HeaderProps {
   onExportJSON?: () => void;
   onImportJSON?: (file: File) => void;
   onClearCache?: () => void;
+  onOpenClientIdModal?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -38,6 +40,7 @@ export const Header: React.FC<HeaderProps> = ({
   onExportJSON,
   onImportJSON,
   onClearCache,
+  onOpenClientIdModal,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -143,6 +146,19 @@ export const Header: React.FC<HeaderProps> = ({
               {isDemoMode ? 'Ver mi cuenta real' : 'Probar Demo'}
             </span>
           </button>
+
+          {/* OAuth Client ID Settings button */}
+          {onOpenClientIdModal && (
+            <button
+              id="header-client-id-config-btn"
+              type="button"
+              onClick={onOpenClientIdModal}
+              className="p-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors shadow-2xs"
+              title="Configurar Google Client ID / Orígenes OAuth"
+            >
+              <KeyRound className="w-4 h-4" />
+            </button>
+          )}
 
           {/* User authentication */}
           {user ? (
