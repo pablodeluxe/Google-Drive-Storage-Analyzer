@@ -50,8 +50,17 @@ import { FileDetailsDrawer } from './components/FileDetailsDrawer';
 import { CleanupAdvisor } from './components/CleanupAdvisor';
 import { CleanupModal } from './components/CleanupModal';
 import { ClientIdModal } from './components/ClientIdModal';
+import { PrivacyPolicy } from './components/PrivacyPolicy';
+import { TermsOfService } from './components/TermsOfService';
 
 export default function App() {
+  const [currentView, setCurrentView] = useState<'app' | 'privacy' | 'terms'>(() => {
+    if (typeof window !== 'undefined') {
+      if (window.location.hash === '#privacy') return 'privacy';
+      if (window.location.hash === '#terms') return 'terms';
+    }
+    return 'app';
+  });
   const [user, setUser] = useState<AppUser | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -250,8 +259,21 @@ export default function App() {
       }
     );
 
+    const handleHashChange = () => {
+      if (window.location.hash === '#privacy') {
+        setCurrentView('privacy');
+      } else if (window.location.hash === '#terms') {
+        setCurrentView('terms');
+      } else {
+        setCurrentView('app');
+      }
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+
     return () => {
       isMounted = false;
+      window.removeEventListener('hashchange', handleHashChange);
       if (typeof unsubscribe === 'function') {
         unsubscribe();
       }
@@ -546,6 +568,38 @@ export default function App() {
     };
   }, [activeNode, searchQuery, selectedCategory, allNodes]);
 
+  if (currentView === 'privacy') {
+    return (
+      <PrivacyPolicy
+        onBack={() => {
+          window.location.hash = '';
+          setCurrentView('app');
+        }}
+        onNavigateToTerms={() => {
+          window.location.hash = 'terms';
+          setCurrentView('terms');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+      />
+    );
+  }
+
+  if (currentView === 'terms') {
+    return (
+      <TermsOfService
+        onBack={() => {
+          window.location.hash = '';
+          setCurrentView('app');
+        }}
+        onNavigateToPrivacy={() => {
+          window.location.hash = 'privacy';
+          setCurrentView('privacy');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-100/70 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans antialiased">
       {/* Header */}
@@ -563,6 +617,10 @@ export default function App() {
         onImportJSON={handleImportJSON}
         onClearCache={handleClearCache}
         onOpenClientIdModal={() => setClientIdModalOpen(true)}
+        onOpenPrivacyPolicy={() => {
+          window.location.hash = 'privacy';
+          setCurrentView('privacy');
+        }}
       />
 
       {/* Main Content Area */}
@@ -723,6 +781,49 @@ export default function App() {
           onRequestBulkTrash={handleRequestBulkTrash}
         />
       </main>
+
+      {/* Footer with Privacy Policy link */}
+      <footer className="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-6 px-4 mt-12 text-center text-xs text-slate-500 dark:text-slate-400">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+          <p>Google Drive Storage Analyzer &bull; Procesamiento seguro del lado del cliente</p>
+          <div className="flex items-center gap-4">
+            <button
+              id="footer-privacy-policy-link"
+              type="button"
+              onClick={() => {
+                window.location.hash = 'privacy';
+                setCurrentView('privacy');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="hover:text-blue-600 dark:hover:text-blue-400 underline font-medium cursor-pointer"
+            >
+              Política de Privacidad
+            </button>
+            <span>&bull;</span>
+            <button
+              id="footer-terms-link"
+              type="button"
+              onClick={() => {
+                window.location.hash = 'terms';
+                setCurrentView('terms');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="hover:text-blue-600 dark:hover:text-blue-400 underline font-medium cursor-pointer"
+            >
+              Condiciones del Servicio
+            </button>
+            <span>&bull;</span>
+            <a
+              href="https://myaccount.google.com/permissions"
+              target="_blank"
+              rel="noreferrer"
+              className="hover:text-blue-600 dark:hover:text-blue-400 underline font-medium"
+            >
+              Permisos de Google
+            </a>
+          </div>
+        </div>
+      </footer>
 
       {/* Confirmation Modal for deletion / trashing */}
       <CleanupModal

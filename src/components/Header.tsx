@@ -8,6 +8,7 @@ import {
   Upload,
   Database,
   KeyRound,
+  ShieldCheck,
 } from 'lucide-react';
 import { ScanProgress, AppUser } from '../types';
 
@@ -25,6 +26,7 @@ interface HeaderProps {
   onImportJSON?: (file: File) => void;
   onClearCache?: () => void;
   onOpenClientIdModal?: () => void;
+  onOpenPrivacyPolicy?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -41,6 +43,7 @@ export const Header: React.FC<HeaderProps> = ({
   onImportJSON,
   onClearCache,
   onOpenClientIdModal,
+  onOpenPrivacyPolicy,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -170,6 +173,19 @@ export const Header: React.FC<HeaderProps> = ({
               title="Configurar Google Client ID / Orígenes OAuth"
             >
               <KeyRound className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* Privacy Policy button */}
+          {onOpenPrivacyPolicy && (
+            <button
+              id="header-privacy-policy-btn"
+              type="button"
+              onClick={onOpenPrivacyPolicy}
+              className="p-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors shadow-2xs"
+              title="Política de Privacidad"
+            >
+              <ShieldCheck className="w-4 h-4" />
             </button>
           )}
 
