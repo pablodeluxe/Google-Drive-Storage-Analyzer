@@ -32,6 +32,14 @@ export async function fetchStorageQuota(accessToken: string): Promise<StorageQuo
         'Tu sesión de Google Drive ha caducado o las credenciales no son válidas. Por favor vuelve a conectar tu cuenta.'
       );
     }
+    
+    // Check if Google Drive API is disabled on the GCP project
+    if (errText.includes('SERVICE_DISABLED') || errText.includes('has not been used in project') || errText.includes('accessNotConfigured')) {
+      throw new Error(
+        'La API de Google Drive no está habilitada en tu proyecto de Google Cloud (Código 403). Debes hacer clic en "Habilitar API" en Google Cloud Console para tu proyecto.'
+      );
+    }
+
     throw new Error(`Error al consultar almacenamiento de Google Drive (${res.status}): ${errText}`);
   }
 
@@ -87,6 +95,11 @@ export async function scanDrive(
         clearAuthSession();
         throw new DriveAuthExpiredError(
           'Tu sesión de Google Drive ha caducado durante el escaneo. Por favor vuelve a conectar tu cuenta.'
+        );
+      }
+      if (errText.includes('SERVICE_DISABLED') || errText.includes('has not been used in project') || errText.includes('accessNotConfigured')) {
+        throw new Error(
+          'La API de Google Drive no está habilitada en tu proyecto de Google Cloud (Código 403). Debes habilitarla en Google Cloud Console.'
         );
       }
       throw new Error(`Error al listar archivos (${res.status}): ${errText}`);

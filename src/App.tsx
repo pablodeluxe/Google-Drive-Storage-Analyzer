@@ -11,6 +11,8 @@ import {
   Layers,
   ArrowRight,
   X,
+  ExternalLink,
+  Github,
 } from 'lucide-react';
 import {
   DriveNode,
@@ -646,6 +648,18 @@ export default function App() {
             </div>
 
             <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              {scanProgress.error && (scanProgress.error.includes('no está habilitada') || scanProgress.error.includes('SERVICE_DISABLED') || scanProgress.error.includes('403')) && (
+                <a
+                  id="error-enable-drive-api-link"
+                  href="https://console.developers.google.com/apis/api/drive.googleapis.com/overview?project=937255355329"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition-colors shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <span>Habilitar Drive API en Google Cloud</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              )}
               <button
                 id="error-config-oauth-btn"
                 type="button"
@@ -814,12 +828,25 @@ export default function App() {
             </button>
             <span>&bull;</span>
             <a
+              id="footer-google-permissions-link"
               href="https://myaccount.google.com/permissions"
               target="_blank"
               rel="noreferrer"
               className="hover:text-blue-600 dark:hover:text-blue-400 underline font-medium"
             >
               Permisos de Google
+            </a>
+            <span>&bull;</span>
+            <a
+              id="footer-github-repo-link"
+              href="https://github.com/pablodeluxe/google-drive-storage-analyzer"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 hover:text-slate-900 dark:hover:text-white font-medium transition-colors"
+              title="Ver repositorio en GitHub"
+            >
+              <Github className="w-4 h-4 text-slate-700 dark:text-slate-300" />
+              <span>GitHub</span>
             </a>
           </div>
         </div>

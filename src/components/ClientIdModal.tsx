@@ -156,6 +156,9 @@ export const ClientIdModal: React.FC<ClientIdModalProps> = ({
                 <strong>Barra diagonal:</strong> Asegúrate de que no termine con <code className="font-mono">.app/</code>.
               </li>
               <li>
+                <strong>API de Google Drive habilitada:</strong> En tu proyecto de Google Cloud debes tener activada la <strong>«Google Drive API»</strong> desde <em>APIs y Servicios &gt; Biblioteca</em>.
+              </li>
+              <li>
                 <strong>Tipo de credencial:</strong> Debe ser una credencial de tipo <strong>«Aplicación web»</strong> (*Web Application*).
               </li>
             </ul>
