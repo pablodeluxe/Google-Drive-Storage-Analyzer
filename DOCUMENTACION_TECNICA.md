@@ -13,6 +13,7 @@ Este documento detalla la arquitectura, el stack tecnológico, los requerimiento
 - **Identificar oportunidades de limpieza** con un **Asesor Inteligente** (detección de archivos masivos, archivos obsoletos/antiguos, instaladores ISO/DMG/EXE y posibles duplicados).
 - **Gestionar archivos en tiempo real:** enviar a la papelera o eliminar permanentemente elementos con actualización inmediata del almacenamiento y cuotas.
 - **Persistencia local ultrarrápida (IndexedDB):** almacena en caché el árbol de archivos y cuotas para reingresos instantáneos sin saturar los límites de peticiones de la API de Google.
+- **Configuración y Diagnóstico OAuth Integrado:** soporte para Client IDs dinámicos y detección proactiva de errores de configuración (`origin_mismatch`, `SERVICE_DISABLED` 403).
 - **Arquitectura Zero-Knowledge / Privacidad Total:** todo el escaneo, agregación de directorios, cálculo de tamaños y renderizado visual se procesan **100% en el navegador del usuario**. Ningún archivo, nombre o credencial se almacena en servidores externos.
 
 ---
@@ -22,7 +23,7 @@ Este documento detalla la arquitectura, el stack tecnológico, los requerimiento
 ### 2.1. Frontend & Core
 | Tecnología | Versión | Rol / Justificación |
 |---|---|---|
-| **React** | 19.x | Biblioteca UI reactiva de alto rendimiento con renderizado por componentes. |
+| **React** | 19.x | Biblioteca UI reactiva de alto rendimiento con renderizado por componentes funcionales y hooks. |
 | **TypeScript** | 5.8 | Tipado estricto para modelos de datos (nodos de Drive, cuotas, estados de escaneo, eventos). |
 | **Vite** | 6.x | Herramienta de compilación (*bundler*) y servidor de desarrollo con Rollup para builds optimizados. |
 | **Tailwind CSS** | 4.x | Framework de utilidades CSS integrado nativamente con `@tailwindcss/vite` para estilos responsivos y modo oscuro. |
@@ -39,7 +40,7 @@ Este documento detalla la arquitectura, el stack tecnológico, los requerimiento
 | Servicio | Versión | Rol |
 |---|---|---|
 | **Google Identity Services (GSI)** | v2 | Flujo OAuth 2.0 basado en Token Client (`initTokenClient`) para inicio de sesión seguro en el cliente. |
-| **Google Drive REST API** | v3 | Endpoints de consulta de cuota (`/about`), listado paginado de archivos (`/files`), actualización (`/files/{id}`) y borrado. |
+| **Google Drive REST API** | v3 | Endpoints de consulta de cuota (`/about`), listado paginado de archivos (`/files`), actualización (`/files/{id}`) y borrado (`/files/{id}`). |
 
 ### 2.4. Persistencia Local
 | Tecnología | Implementación | Rol |
@@ -48,7 +49,42 @@ Este documento detalla la arquitectura, el stack tecnológico, los requerimiento
 
 ---
 
-## 3. Arquitectura del Software
+## 3. Estructura del Código Fuente
+
+```
+/
+├── public/                     # Recursos estáticos y favicon
+├── src/
+│   ├── components/             # Componentes modulares de interfaz de usuario
+│   │   ├── CleanupAdvisor.tsx  # Tarjetas del asesor inteligente de limpieza
+│   │   ├── CleanupModal.tsx    # Modal de selección y eliminación por lotes
+│   │   ├── ClientIdModal.tsx   # Modal de configuración guiada de Google OAuth
+│   │   ├── FileDetailsDrawer.tsx # Cajón lateral de metadatos del archivo
+│   │   ├── Header.tsx          # Barra superior, autenticación y controles
+│   │   ├── PrivacyPolicy.tsx   # Modal con la Política de Privacidad
+│   │   ├── StorageOverview.tsx # Barra de cuota y tarjetas de categorías
+│   │   ├── TermsOfService.tsx  # Modal con las Condiciones del Servicio
+│   │   └── TreemapHeatmap.tsx  # Lienzo interactivo D3 Treemap con zoom
+│   ├── config/                 # Configuración de OAuth y valores predeterminados
+│   ├── services/               # Capa de servicios y comunicación externa
+│   │   ├── auth.ts             # Cliente Google Identity Services (OAuth 2.0)
+│   │   ├── db.ts               # Capa de base de datos local IndexedDB
+│   │   └── drive.ts            # Consumo de Google Drive API v3 y jerarquías
+│   ├── utils/
+│   │   └── format.ts           # Formateadores de bytes, fechas y colores
+│   ├── App.tsx                 # Componente raíz y orquestador de estado global
+│   ├── index.css               # Estilos globales y configuración de Tailwind v4
+│   ├── main.tsx                # Punto de entrada de React
+│   └── types.ts                # Definiciones de TypeScript e interfaces
+├── DOCUMENTACION_FUNCIONAL.md  # Manual de usuario y especificación funcional
+├── DOCUMENTACION_TECNICA.md    # Arquitectura técnica y despliegue (este archivo)
+├── README.md                   # Resumen del proyecto e inicio rápido
+└── package.json                # Dependencias y scripts del proyecto
+```
+
+---
+
+## 4. Arquitectura del Software
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -65,6 +101,7 @@ Este documento detalla la arquitectura, el stack tecnológico, los requerimiento
 │  │  - Paginación continua de hasta 1000 items por lote               │  │
 │  │  - Construcción del árbol jerárquico recursivo                    │  │
 │  │  - Cálculo de peso acumulado, conteo de carpetas/archivos         │  │
+│  │  - Detección de errores 403 (SERVICE_DISABLED / accessNotConfig)  │  │
 │  └──────────────────┬───────────────────────────────┬────────────────┘  │
 │                     │                               │                   │
 │                     ▼                               ▼                   │
@@ -82,11 +119,13 @@ Este documento detalla la arquitectura, el stack tecnológico, los requerimiento
 │  │  - TreemapHeatmap (Lienzo interactivo con zoom & drilldown)       │  │
 │  │  - CleanupAdvisor (Reglas de limpieza: >1GB, >1 año, duplicados)  │  │
 │  │  - FileDetailsDrawer & CleanupModal (Acciones de borrado real)    │  │
+│  │  - ClientIdModal (Configuración OAuth e instrucciones de API)     │  │
+│  │  - Footer (GitHub, Privacidad, Términos, Permisos de Google)      │  │
 │  └───────────────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 3.1. Flujo de Datos
+### 4.1. Flujo de Datos
 1. **Autenticación:** El usuario pulsa «Conectar Google Drive». GSI abre la ventana emergente de Google con los permisos solicitados (`drive`, `userinfo.email`, `userinfo.profile`).
 2. **Obtención de Cuota:** Se realiza una llamada a `GET https://www.googleapis.com/drive/v3/about?fields=storageQuota,user` para conocer el límite total, bytes en uso y detalles de la cuenta.
 3. **Indexación de Archivos:** Se invoca `GET https://www.googleapis.com/drive/v3/files` paginado con `pageSize=1000`, solicitando únicamente los campos indispensables (`id, name, mimeType, size, quotaBytesUsed, parents, modifiedTime, webViewLink, owners, trashed`).
@@ -96,25 +135,26 @@ Este documento detalla la arquitectura, el stack tecnológico, los requerimiento
 
 ---
 
-## 4. Requerimientos del Sistema
+## 5. Requerimientos del Sistema
 
-### 4.1. Requerimientos de Desarrollo Local
+### 5.1. Requerimientos de Desarrollo Local
 - **Node.js:** Versión `18.x`, `20.x` LTS o `22.x` LTS.
 - **NPM:** Versión `9.x` o superior (o alternativa `pnpm` / `yarn`).
 - **Navegador Web:** Chrome 90+, Edge 90+, Firefox 90+, Safari 15+ (con soporte para IndexedDB y ResizeObserver).
 
-### 4.2. Requerimientos en Google Cloud Console (Para producción)
+### 5.2. Requerimientos en Google Cloud Console (Para producción)
 Para que los usuarios puedan autenticarse contra su propia cuenta de Google Drive en producción, se requiere configurar un proyecto en Google Cloud:
 
 1. **Crear Proyecto:** En [Google Cloud Console](https://console.cloud.google.com/).
 2. **Habilitar API:**
    - Ir a **APIs & Services > Library**.
-   - Buscar y habilitar **Google Drive API**.
+   - Buscar y habilitar **Google Drive API** (Obligatorio para evitar el error 403 `SERVICE_DISABLED`).
+   - URL directa de activación: `https://console.developers.google.com/apis/api/drive.googleapis.com/overview?project=[PROJECT_ID]`.
 3. **Configurar Pantalla de Consentimiento OAuth (OAuth Consent Screen):**
    - Tipo de usuario: **Externo** (External) para público general, o **Interno** (Internal) si es para Google Workspace corporativo.
-   - Datos básicos: Nombre de la app, correo de asistencia, logotipo (opcional).
+   - Datos básicos: Nombre de la app, correo de asistencia, enlaces a política de privacidad y términos.
    - **Scopes Requeridos:**
-     - `https://www.googleapis.com/auth/drive` (o `.../drive.metadata.readonly` + `.../drive.file` si sólo se requiere lectura y borrado limitado).
+     - `https://www.googleapis.com/auth/drive` (o `.../drive.metadata.readonly` + `.../drive.file`).
      - `https://www.googleapis.com/auth/userinfo.profile`
      - `https://www.googleapis.com/auth/userinfo.email`
 4. **Crear Credenciales de ID de Cliente OAuth:**
@@ -122,14 +162,14 @@ Para que los usuarios puedan autenticarse contra su propia cuenta de Google Driv
    - Nombre: `Google Drive Storage Analyzer Prod`.
    - **Orígenes de JavaScript autorizados (Authorized JavaScript origins):**
      - Añadir la URL exacta de producción (ej. `https://tu-dominio.com`, `https://midriveanalyzer.web.app` o la URL de Cloud Run / Vercel).
-     - *Nota:* Google OAuth no permite comodines (`*`) ni rutas con barra final.
+     - *Nota:* Google OAuth no permite comodines (`*`) ni rutas con barra final (`/`).
 5. **Copiar el Client ID:**
    - Ejemplo: `1234567890-abcdefg1234567.apps.googleusercontent.com`
-   - Se configurará en la variable de entorno `VITE_GOOGLE_CLIENT_ID`.
+   - Se configurará en la variable de entorno `VITE_GOOGLE_CLIENT_ID` o directamente a través del modal de configuración en la app.
 
 ---
 
-## 5. Configuración de Variables de Entorno
+## 6. Configuración de Variables de Entorno
 
 Crear un archivo `.env` en la raíz del proyecto para producción (basado en `.env.example`):
 
@@ -141,11 +181,9 @@ VITE_GOOGLE_CLIENT_ID="TU_CLIENT_ID_DE_GOOGLE.apps.googleusercontent.com"
 APP_URL="https://tu-dominio.com"
 ```
 
-> **Nota:** La aplicación cuenta con un ID de cliente de pruebas preconfigurado y un modo de demostración (*Mock Data*) para previsualizaciones sin conexión o evaluaciones sin credenciales.
-
 ---
 
-## 6. Guía de Despliegue en Producción
+## 7. Guía de Despliegue en Producción
 
 Al ser una aplicación web estática del lado del cliente (SPA), puede desplegarse en cualquier servicio de alojamiento de estáticos o en un contenedor Docker con Nginx.
 
@@ -172,22 +210,6 @@ Al ser una aplicación web estática del lado del cliente (SPA), puede desplegar
 #### Configuración para Netlify (`_redirects` en `public/_redirects`):
 ```
 /*    /index.html   200
-```
-
-#### Configuración para Firebase Hosting (`firebase.json`):
-```json
-{
-  "hosting": {
-    "public": "dist",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-    "rewrites": [
-      {
-        "source": "**",
-        "destination": "/index.html"
-      }
-    ]
-  }
-}
 ```
 
 ---
@@ -233,57 +255,23 @@ EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
 ```
 
-#### Comandos para construir y ejecutar el contenedor:
-```bash
-# Construir imagen
-docker build --build-arg VITE_GOOGLE_CLIENT_ID="TU_CLIENT_ID" -t drive-storage-analyzer:latest .
-
-# Ejecutar localmente en puerto 8080
-docker run -d -p 8080:80 --name drive-analyzer drive-storage-analyzer:latest
-```
-
 ---
 
-### Opción C: Despliegue en Google Cloud Run (CLI de Google Cloud)
-
-Si se utiliza Google Cloud Platform:
-
-```bash
-# 1. Autenticar en GCP
-gcloud auth login
-gcloud config set project [TU_PROJECT_ID]
-
-# 2. Compilar y desplegar directamente desde el código fuente
-gcloud run deploy drive-storage-analyzer \
-  --source . \
-  --platform managed \
-  --region us-central1 \
-  --allow-unauthenticated \
-  --set-env-vars VITE_GOOGLE_CLIENT_ID="TU_CLIENT_ID"
-```
-
----
-
-## 7. Directivas de Seguridad & Buenas Prácticas
+## 8. Directivas de Seguridad & Buenas Prácticas
 
 1. **Protocolo HTTPS Obligatorio:**
    Google Identity Services rechaza cualquier flujo OAuth originado en conexiones HTTP no seguras (salvo `http://localhost` para desarrollo).
 2. **Tokens Efímeros:**
    El token de acceso OAuth obtenido reside únicamente en la memoria de la sesión activa del usuario. Nunca se almacena en `localStorage` no cifrado ni en bases de datos remotas.
-3. **Headers de Seguridad Recomendados (Nginx / Cloudflare):**
-   ```http
-   Strict-Transport-Security: max-age=31536000; includeSubDomains
-   X-Content-Type-Options: nosniff
-   X-Frame-Options: SAMEORIGIN
-   Referrer-Policy: strict-origin-when-cross-origin
-   Content-Security-Policy: default-src 'self'; script-src 'self' https://accounts.google.com https://apis.google.com; connect-src 'self' https://www.googleapis.com https://accounts.google.com; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; frame-src https://accounts.google.com;
-   ```
+3. **Manejo de Errores Resiliente:**
+   - La aplicación detecta tokens expirados y solicita re-autenticación limpia.
+   - Las respuestas de API deshabilitada (403 `SERVICE_DISABLED`) activan un enlace de activación guiado.
 4. **Respeto a las Cuotas de Google Drive API:**
    Google impone cuotas por usuario de `12,000 queries por minuto`. El escaneo se realiza solicitando lotes de 1,000 elementos (`pageSize=1000`), lo que permite escanear unidades de más de 50,000 archivos en menos de 50 peticiones HTTP, minimizando el riesgo de errores `429 Too Many Requests`.
 
 ---
 
-## 8. Comandos Útiles de Mantenimiento
+## 9. Comandos Útiles de Mantenimiento
 
 | Comando | Descripción |
 |---|---|
@@ -295,8 +283,9 @@ gcloud run deploy drive-storage-analyzer \
 
 ---
 
-## 9. Registro de Decisiones de Diseño
+## 10. Registro de Decisiones de Diseño
 
 - **D3 Treemap con Ratio 1.1:** Se eligió un ratio de aspecto de 1.1 en lugar de valores alargados para garantizar que los mosaicos tengan proporciones rectangulares armónicas y legibles para los nombres de los archivos.
 - **Atribución 0 al Nodo Raíz en D3:** El nodo raíz en `d3.hierarchy` no aporta valor propio a la suma (`sum(d => d.children?.length ? 0 : d.size)`), garantizando que el 100% de la superficie del lienzo sea cubierta por los mosaicos sin espacios vacíos ni artefactos en forma de «L».
 - **Límites de Densidad (30, 50, 100, 250, 500):** Permiten al usuario ajustar la densidad del mapa según la potencia de su dispositivo o la cantidad de elementos en su unidad, consolidando los elementos menores en el mosaico interactivo «Otros».
+- **Diagnósticos de Integración en Tiempo Real:** Detección contextual de errores en la API de Google Drive (como 403 `SERVICE_DISABLED` o `accessNotConfigured`) para ofrecer enlaces de solución directa en un solo clic al usuario.
